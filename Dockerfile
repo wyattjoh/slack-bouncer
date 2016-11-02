@@ -9,6 +9,7 @@ COPY package.json /usr/src/app/
 RUN npm install
 
 # Setup the environment
+ENV PORT 5000
 ENV PATH /usr/src/app/bin:$PATH
 EXPOSE 5000
 
