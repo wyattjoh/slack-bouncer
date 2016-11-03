@@ -80,8 +80,12 @@ function Intercept(handle) {
 
       console.log(`INTERCEPT: ${req.method} ${req.path}`);
 
-      // Perform the interception.
-      handle(rsp, data, req, res);
+      try {
+        // Perform the interception.
+        handle(rsp, data, req, res);
+      } catch(e) {
+        console.error('INTERCEPT HANDLE FAILURE: ' + e.message);
+      }
 
       // Continue the request.
       callback(null, data);
@@ -143,6 +147,30 @@ if (process.env.MAPPINGS && process.env.MAPPINGS.length > 0) {
     console.error(`Couldn't parse the mappings JSON: ${e.message}`);
   }
 }
+
+function IdentifyReply(reply) {
+  if (reply.answer.options) {
+    return `*${reply.question}*: ${reply.answer.options.map((o) => o.title).join(', ')}`;
+  } else if (reply.answer.text) {
+    return `*${reply.question}*: ${reply.answer.text}`;
+  }
+}
+
+app.post('/v1/form/:form_id/submission', Intercept((rsp, data) => {
+  const submission = JSON.parse(data.toString('ascii'));
+  const answers = submission.replies.map(IdentifyReply).map((a) => '> ' + a);
+
+  // Build the slack message array.
+  const messageLines = [
+    `*${submission.header.title}* Submission *#${submission.number}* at *${new Date(submission.date_created).toString()}*`
+  ].concat(answers);
+
+  // Assemble the messages.
+  const message = messageLines.join('\n');
+
+  // Actually send the slack message.
+  SendSlackMessage(message);
+}));
 
 /**
  * Proxy the rest of the requests directly.
