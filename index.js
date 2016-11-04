@@ -70,6 +70,7 @@ function Intercept(handle) {
         handle(rsp, data, req, res);
       } catch(e) {
         console.error('INTERCEPT HANDLE FAILURE: ' + e.message);
+        console.error(e);
       }
 
       // Continue the request.
@@ -142,19 +143,24 @@ function IdentifyReply(reply) {
 }
 
 app.post('/v1/form/:form_id/submission', Intercept((rsp, data) => {
-  const submission = JSON.parse(data.toString('ascii'));
-  const answers = submission.replies.map(IdentifyReply).map((a) => '> ' + a);
+  try {
+    const submission = JSON.parse(data.toString('ascii'));
+    const answers = submission.replies.map(IdentifyReply).map((a) => '> ' + a);
 
-  // Build the slack message array.
-  const messageLines = [
-    `*${submission.header.title || 'Form'}* Submission *#${submission.number}* at *${new Date(submission.date_created).toString()}*`
-  ].concat(answers);
+    // Build the slack message array.
+    const messageLines = [
+      `*${submission.header.title || 'Form'}* Submission *#${submission.number}* at *${new Date(submission.date_created).toString()}*`
+    ].concat(answers);
 
-  // Assemble the messages.
-  const message = messageLines.join('\n');
+    // Assemble the messages.
+    const message = messageLines.join('\n');
 
-  // Actually send the slack message.
-  SendSlackMessage(message);
+    // Actually send the slack message.
+    SendSlackMessage(message);
+  } catch(e) {
+    console.log(`INTERCEPT HANDLE FAILURE: ${data.toString('ascii')}`);
+    throw e;
+  }
 }));
 
 /**
