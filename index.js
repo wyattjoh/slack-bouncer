@@ -144,7 +144,7 @@ function IdentifyReply(reply) {
 
 app.post('/v1/form/:form_id/submission', Intercept((rsp, data) => {
   try {
-    const submission = JSON.parse(data.toString('ascii'));
+    const submission = JSON.parse(data.toString('utf8'));
     const answers = submission.replies.map(IdentifyReply).map((a) => '> ' + a);
 
     // Build the slack message array.
