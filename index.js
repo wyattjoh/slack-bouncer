@@ -2,8 +2,6 @@ const express = require('express');
 const proxy = require('express-http-proxy');
 const request = require('request');
 const defaults = require('defaults');
-const url = require('url');
-const path = require('path');
 
 /**
  * Sends a slack message.
@@ -44,22 +42,10 @@ function SendSlackMessage(message, options) {
 }
 
 /**
- * Rewrites the path so that it is relative to the target url.
- */
-function RewritePath(req, res) {
-  const targetUrl = url.parse(process.env.TARGET_URL);
-
-  targetUrl.pathname = path.join(targetUrl.pathname, url.parse(req.url).path);
-
-  return url.format(targetUrl);
-}
-
-/**
  * Actually perform the proxy.
  */
 function Proxy() {
   return proxy(process.env.TARGET_URL, {
-    forwardPath: RewritePath,
     intercept: (rsp, data, req, res, callback) => {
       console.log(`PROXY: ${req.method} ${req.path}`);
 
@@ -75,7 +61,6 @@ function Proxy() {
  */
 function Intercept(handle) {
   return proxy(process.env.TARGET_URL, {
-    forwardPath: RewritePath,
     intercept: (rsp, data, req, res, callback) => {
 
       console.log(`INTERCEPT: ${req.method} ${req.path}`);
@@ -162,7 +147,7 @@ app.post('/v1/form/:form_id/submission', Intercept((rsp, data) => {
 
   // Build the slack message array.
   const messageLines = [
-    `*${submission.header.title}* Submission *#${submission.number}* at *${new Date(submission.date_created).toString()}*`
+    `*${submission.header.title || 'Form'}* Submission *#${submission.number}* at *${new Date(submission.date_created).toString()}*`
   ].concat(answers);
 
   // Assemble the messages.
