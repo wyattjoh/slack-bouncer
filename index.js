@@ -2,8 +2,6 @@ const express = require('express');
 const proxy = require('express-http-proxy');
 const request = require('request');
 const defaults = require('defaults');
-const url = require('url');
-const path = require('path');
 
 /**
  * Sends a slack message.
@@ -44,22 +42,10 @@ function SendSlackMessage(message, options) {
 }
 
 /**
- * Rewrites the path so that it is relative to the target url.
- */
-function RewritePath(req, res) {
-  const targetUrl = url.parse(process.env.TARGET_URL);
-
-  targetUrl.pathname = path.join(targetUrl.pathname, url.parse(req.url).path);
-
-  return url.format(targetUrl);
-}
-
-/**
  * Actually perform the proxy.
  */
 function Proxy() {
   return proxy(process.env.TARGET_URL, {
-    forwardPath: RewritePath,
     intercept: (rsp, data, req, res, callback) => {
       console.log(`PROXY: ${req.method} ${req.path}`);
 
@@ -75,13 +61,17 @@ function Proxy() {
  */
 function Intercept(handle) {
   return proxy(process.env.TARGET_URL, {
-    forwardPath: RewritePath,
     intercept: (rsp, data, req, res, callback) => {
 
       console.log(`INTERCEPT: ${req.method} ${req.path}`);
 
-      // Perform the interception.
-      handle(rsp, data, req, res);
+      try {
+        // Perform the interception.
+        handle(rsp, data, req, res);
+      } catch(e) {
+        console.error('INTERCEPT HANDLE FAILURE: ' + e.message);
+        console.error(e);
+      }
 
       // Continue the request.
       callback(null, data);
@@ -143,6 +133,35 @@ if (process.env.MAPPINGS && process.env.MAPPINGS.length > 0) {
     console.error(`Couldn't parse the mappings JSON: ${e.message}`);
   }
 }
+
+function IdentifyReply(reply) {
+  if (reply.answer.options) {
+    return `*${reply.question}*: ${reply.answer.options.map((o) => o.title).join(', ')}`;
+  } else if (reply.answer.text) {
+    return `*${reply.question}*: ${reply.answer.text}`;
+  }
+}
+
+app.post('/v1/form/:form_id/submission', Intercept((rsp, data) => {
+  try {
+    const submission = JSON.parse(data.toString('utf8'));
+    const answers = submission.replies.map(IdentifyReply).map((a) => '> ' + a);
+
+    // Build the slack message array.
+    const messageLines = [
+      `*${submission.header.title || 'Form'}* Submission *#${submission.number}* at *${new Date(submission.date_created).toString()}*`
+    ].concat(answers);
+
+    // Assemble the messages.
+    const message = messageLines.join('\n');
+
+    // Actually send the slack message.
+    SendSlackMessage(message);
+  } catch(e) {
+    console.log(`INTERCEPT HANDLE FAILURE: ${data.toString('ascii')}`);
+    throw e;
+  }
+}));
 
 /**
  * Proxy the rest of the requests directly.
